@@ -16,11 +16,11 @@ const EditableText = ({ contentId, as: Component = 'p', className = '', children
 
   const handleSave = async () => {
     if (value !== currentValue) {
-      const success = await updateContentValue(contentId, value);
-      if (success) {
+      const result = await updateContentValue(contentId, value);
+      if (result.success) {
         toast.success('Content updated successfully');
       } else {
-        toast.error('Failed to update content');
+        toast.error(result.message || 'Failed to update content');
         setValue(currentValue);
       }
     }

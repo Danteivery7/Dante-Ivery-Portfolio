@@ -100,10 +100,13 @@ export const EditProvider = ({ children }) => {
         ...prev,
         [contentId]: value
       }));
-      return true;
+      return { success: true };
     } catch (error) {
       console.error('Error updating content:', error);
-      return false;
+      return {
+        success: false,
+        message: error.response?.data?.detail || error.response?.data?.message || 'Failed to update content.',
+      };
     }
   };
 

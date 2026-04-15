@@ -1,5 +1,5 @@
 const crypto = require("crypto");
-const { getStore } = require("@netlify/blobs");
+const { connectLambda, getStore } = require("@netlify/blobs");
 const { MongoClient } = require("mongodb");
 const nodemailer = require("nodemailer");
 
@@ -152,6 +152,38 @@ function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function isNetlifyRuntime() {
+  return Boolean(process.env.NETLIFY || process.env.CONTEXT || process.env.SITE_ID);
+}
+
+function getNetlifyBlobSiteId() {
+  return process.env.NETLIFY_BLOBS_SITE_ID || process.env.NETLIFY_SITE_ID || process.env.SITE_ID || "";
+}
+
+function getNetlifyBlobToken() {
+  return process.env.NETLIFY_BLOBS_TOKEN || process.env.NETLIFY_API_TOKEN || "";
+}
+
+function hasStrongBlobConfig() {
+  return Boolean(getNetlifyBlobSiteId() && getNetlifyBlobToken());
+}
+
+function getBlobConsistencyMode() {
+  return hasStrongBlobConfig() ? "strong" : "eventual";
+}
+
+function getBlobPersistenceMode() {
+  if (hasStrongBlobConfig()) {
+    return "netlify-blobs-api";
+  }
+
+  if (isNetlifyRuntime()) {
+    return "netlify-blobs-lambda";
+  }
+
+  return "memory";
+}
+
 function jsonResponse(statusCode, body) {
   return {
     statusCode,
@@ -250,7 +282,30 @@ function buildContentRecord(contentId, value) {
 }
 
 function getBlobStore() {
-  return getStore({ name: STORE_NAME, consistency: "strong" });
+  if (hasStrongBlobConfig()) {
+    return getStore({
+      name: STORE_NAME,
+      siteID: getNetlifyBlobSiteId(),
+      token: getNetlifyBlobToken(),
+      consistency: "strong",
+    });
+  }
+
+  return getStore(STORE_NAME);
+}
+
+function configureBlobPersistence(event) {
+  if (process.env.MONGO_URL || !isNetlifyRuntime() || hasStrongBlobConfig()) {
+    return;
+  }
+
+  if (!event?.blobs) {
+    throw new Error(
+      "Netlify Blobs context is missing for this function request. Add MONGO_URL for database storage or configure NETLIFY_BLOBS_SITE_ID and NETLIFY_BLOBS_TOKEN for strong Netlify Blobs storage."
+    );
+  }
+
+  connectLambda(event);
 }
 
 async function getDatabase() {
@@ -270,7 +325,7 @@ async function getDatabase() {
 async function readPersistentValue(key, fallbackValue) {
   try {
     const store = getBlobStore();
-    const value = await store.get(key, { type: "json", consistency: "strong" });
+    const value = await store.get(key, { type: "json", consistency: getBlobConsistencyMode() });
     if (value !== null) {
       return value;
     }
@@ -279,6 +334,12 @@ async function readPersistentValue(key, fallbackValue) {
     await store.setJSON(key, clonedFallback);
     return clonedFallback;
   } catch (error) {
+    if (isNetlifyRuntime()) {
+      throw new Error(
+        `Persistent storage is unavailable on Netlify for "${key}". Configure MongoDB or make sure Netlify Blobs is available for this site.`
+      );
+    }
+
     if (key === CONTENT_KEY) {
       if (!memoryState.content) {
         memoryState.content = cloneJson(fallbackValue);
@@ -305,6 +366,12 @@ async function writePersistentValue(key, value) {
     const store = getBlobStore();
     await store.setJSON(key, clonedValue);
   } catch (error) {
+    if (isNetlifyRuntime()) {
+      throw new Error(
+        `Persistent storage write failed on Netlify for "${key}". Configure MongoDB or make sure Netlify Blobs is available for this site.`
+      );
+    }
+
     if (key === CONTENT_KEY) {
       memoryState.content = clonedValue;
       return;
@@ -672,12 +739,16 @@ async function handleRoot() {
     adminConfigured: true,
     adminUsername: getAdminUsername(),
     persistenceBackend: getPersistenceBackend(),
+    persistenceMode: process.env.MONGO_URL ? "mongodb" : getBlobPersistenceMode(),
+    persistenceConsistency: process.env.MONGO_URL ? "strong" : getBlobConsistencyMode(),
     runtime: "netlify-function",
   });
 }
 
 exports.handler = async (event) => {
   try {
+    configureBlobPersistence(event);
+
     const method = event.httpMethod || "GET";
     const normalizedPath = normalizePath(event.path);
     const pathParts = normalizedPath.split("/").filter(Boolean);

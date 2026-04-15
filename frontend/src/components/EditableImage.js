@@ -21,12 +21,12 @@ const EditableImage = ({ contentId, alt = '', className = '', fallback }) => {
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64String = reader.result;
-      const success = await updateContentValue(contentId, base64String);
-      if (success) {
+      const result = await updateContentValue(contentId, base64String);
+      if (result.success) {
         toast.success('Image updated successfully');
         setShowUpload(false);
       } else {
-        toast.error('Failed to update image');
+        toast.error(result.message || 'Failed to update image');
       }
     };
     reader.readAsDataURL(file);
@@ -46,11 +46,11 @@ const EditableImage = ({ contentId, alt = '', className = '', fallback }) => {
 
   const handleUrlSave = async () => {
     if (imageUrl && imageUrl !== currentValue) {
-      const success = await updateContentValue(contentId, imageUrl);
-      if (success) {
+      const result = await updateContentValue(contentId, imageUrl);
+      if (result.success) {
         toast.success('Image updated successfully');
       } else {
-        toast.error('Failed to update image');
+        toast.error(result.message || 'Failed to update image');
       }
     }
     setShowUpload(false);

@@ -4,7 +4,7 @@ Open Circuit Solutions is a React portfolio site for Dante Ivery, ready to deplo
 - a Create React App frontend in `frontend/`
 - Netlify Functions in `frontend/netlify/functions/`
 - MongoDB-backed editable content and portfolio storage
-- Netlify Blobs fallback persistence for live edits when MongoDB is not configured
+- Netlify Blobs persistence when MongoDB is not configured
 - SMTP-powered contact form delivery
 
 ## Deploying To Netlify
@@ -23,10 +23,16 @@ Open Circuit Solutions is a React portfolio site for Dante Ivery, ready to deplo
    - `SMTP_PASSWORD`
 4. Deploy.
 
+Optional but recommended if you are not using MongoDB:
+- `NETLIFY_BLOBS_SITE_ID`
+- `NETLIFY_BLOBS_TOKEN`
+
 ## Important Notes
 
 - If `MONGO_URL` is set, the site stores edits and portfolio data in MongoDB.
-- If `MONGO_URL` is not set, the site falls back to Netlify Blobs so text, image, and portfolio edits still persist on the live site.
+- If `MONGO_URL` is not set, the site stores edits in Netlify Blobs.
+- Netlify Blobs using only the built-in function runtime works in `eventual` consistency mode, which is permanent but can briefly lag across browsers and locations.
+- If you want Netlify Blobs with `strong` consistency, add `NETLIFY_BLOBS_SITE_ID` and `NETLIFY_BLOBS_TOKEN` in Netlify so the function can use the Netlify API-backed store path.
 - `MONGO_URL` must be a remote MongoDB connection string such as MongoDB Atlas. `localhost` will not work on Netlify.
 - The frontend uses same-origin `/api/*` calls, and Netlify rewrites those to the bundled function automatically.
 - Edit mode uses backend authentication and bearer tokens. Content and portfolio write endpoints are protected.
