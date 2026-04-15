@@ -1,8 +1,20 @@
 const crypto = require("crypto");
+const { getStore } = require("@netlify/blobs");
 const { MongoClient } = require("mongodb");
 const nodemailer = require("nodemailer");
 
 let cachedClientPromise = null;
+const DEFAULT_ADMIN_USERNAME = "danteivery";
+const DEFAULT_ADMIN_PASSWORD = "1234";
+const STORE_NAME = "open-circuit-solutions";
+const CONTENT_KEY = "editable-content";
+const PORTFOLIO_KEY = "portfolio";
+const CONTACT_SUBMISSIONS_KEY = "contact-submissions";
+const memoryState = {
+  content: null,
+  portfolio: [],
+  contactSubmissions: [],
+};
 
 const jsonHeaders = {
   "Content-Type": "application/json",
@@ -136,6 +148,10 @@ const defaultContent = [
 
 const defaultContentMap = new Map(defaultContent.map((item) => [item.content_id, item]));
 
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 function jsonResponse(statusCode, body) {
   return {
     statusCode,
@@ -154,18 +170,21 @@ function sanitizeHtml(value) {
 }
 
 function buildAdminToken() {
-  const username = process.env.ADMIN_USERNAME;
-  const password = process.env.ADMIN_PASSWORD;
-
-  if (!username || !password) {
-    return null;
-  }
-
+  const username = getAdminUsername();
+  const password = getAdminPassword();
   const salt = process.env.ADMIN_TOKEN_SALT || "open-circuit-solutions-admin";
   return crypto
     .createHash("sha256")
     .update(`${username}:${password}:${salt}`)
     .digest("hex");
+}
+
+function getAdminUsername() {
+  return process.env.ADMIN_USERNAME || DEFAULT_ADMIN_USERNAME;
+}
+
+function getAdminPassword() {
+  return process.env.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
 }
 
 function compareSecure(a, b) {
@@ -230,6 +249,10 @@ function buildContentRecord(contentId, value) {
   };
 }
 
+function getBlobStore() {
+  return getStore({ name: STORE_NAME, consistency: "strong" });
+}
+
 async function getDatabase() {
   if (!process.env.MONGO_URL) {
     return null;
@@ -242,6 +265,95 @@ async function getDatabase() {
 
   const client = await cachedClientPromise;
   return client.db(process.env.DB_NAME || "open_circuit_solutions");
+}
+
+async function readPersistentValue(key, fallbackValue) {
+  try {
+    const store = getBlobStore();
+    const value = await store.get(key, { type: "json", consistency: "strong" });
+    if (value !== null) {
+      return value;
+    }
+
+    const clonedFallback = cloneJson(fallbackValue);
+    await store.setJSON(key, clonedFallback);
+    return clonedFallback;
+  } catch (error) {
+    if (key === CONTENT_KEY) {
+      if (!memoryState.content) {
+        memoryState.content = cloneJson(fallbackValue);
+      }
+      return cloneJson(memoryState.content);
+    }
+
+    if (key === PORTFOLIO_KEY) {
+      return cloneJson(memoryState.portfolio);
+    }
+
+    if (key === CONTACT_SUBMISSIONS_KEY) {
+      return cloneJson(memoryState.contactSubmissions);
+    }
+
+    return cloneJson(fallbackValue);
+  }
+}
+
+async function writePersistentValue(key, value) {
+  const clonedValue = cloneJson(value);
+
+  try {
+    const store = getBlobStore();
+    await store.setJSON(key, clonedValue);
+  } catch (error) {
+    if (key === CONTENT_KEY) {
+      memoryState.content = clonedValue;
+      return;
+    }
+
+    if (key === PORTFOLIO_KEY) {
+      memoryState.portfolio = clonedValue;
+      return;
+    }
+
+    if (key === CONTACT_SUBMISSIONS_KEY) {
+      memoryState.contactSubmissions = clonedValue;
+    }
+  }
+}
+
+async function getContentRecords() {
+  const db = await getDatabase();
+  if (db) {
+    await ensureDefaultContentRecords(db);
+    return db.collection("editable_content").find({}, { projection: { _id: 0 } }).toArray();
+  }
+
+  return readPersistentValue(CONTENT_KEY, defaultContent);
+}
+
+async function getPortfolioRecords() {
+  const db = await getDatabase();
+  if (db) {
+    return db
+      .collection("portfolio")
+      .find({}, { projection: { _id: 0 } })
+      .sort({ order: 1 })
+      .toArray();
+  }
+
+  return readPersistentValue(PORTFOLIO_KEY, []);
+}
+
+function getPersistenceBackend() {
+  if (process.env.MONGO_URL) {
+    return "mongodb";
+  }
+
+  if (process.env.NETLIFY || process.env.CONTEXT || process.env.SITE_ID) {
+    return "netlify-blobs";
+  }
+
+  return "memory";
 }
 
 async function ensureDefaultContentRecords(db) {
@@ -263,12 +375,6 @@ async function ensureDefaultContentRecords(db) {
 
 function requireAdmin(event) {
   const expectedToken = buildAdminToken();
-  if (!expectedToken) {
-    return jsonResponse(503, {
-      detail: "Admin credentials are not configured. Set ADMIN_USERNAME and ADMIN_PASSWORD.",
-    });
-  }
-
   const authorization = event.headers.authorization || event.headers.Authorization || "";
   if (!authorization.startsWith("Bearer ")) {
     return jsonResponse(401, { detail: "Unauthorized" });
@@ -283,15 +389,8 @@ function requireAdmin(event) {
 }
 
 async function handleLogin(event) {
-  const username = process.env.ADMIN_USERNAME;
-  const password = process.env.ADMIN_PASSWORD;
-
-  if (!username || !password) {
-    return jsonResponse(200, {
-      success: false,
-      message: "Admin login is disabled until ADMIN_USERNAME and ADMIN_PASSWORD are configured.",
-    });
-  }
+  const username = getAdminUsername();
+  const password = getAdminPassword();
 
   const body = parseBody(event.body);
   if (!compareSecure(body.username, username) || !compareSecure(body.password, password)) {
@@ -309,32 +408,13 @@ async function handleLogin(event) {
 }
 
 async function handleGetContent(pathParts) {
-  const db = await getDatabase();
-  if (!db) {
-    if (pathParts.length === 1) {
-      return jsonResponse(200, defaultContent);
-    }
-
-    const item = defaultContentMap.get(pathParts[1]);
-    if (!item) {
-      return jsonResponse(404, { detail: "Content not found" });
-    }
-    return jsonResponse(200, item);
-  }
-
-  await ensureDefaultContentRecords(db);
-  const collection = db.collection("editable_content");
+  const contentRecords = await getContentRecords();
 
   if (pathParts.length === 1) {
-    const items = await collection.find({}, { projection: { _id: 0 } }).toArray();
-    return jsonResponse(200, items);
+    return jsonResponse(200, contentRecords);
   }
 
-  const item = await collection.findOne(
-    { content_id: pathParts[1] },
-    { projection: { _id: 0 } }
-  );
-
+  const item = contentRecords.find((entry) => entry.content_id === pathParts[1]);
   if (!item) {
     return jsonResponse(404, { detail: "Content not found" });
   }
@@ -349,12 +429,6 @@ async function handleUpdateContent(event, pathParts) {
   }
 
   const db = await getDatabase();
-  if (!db) {
-    return jsonResponse(503, {
-      detail: "Database is not configured. Set MONGO_URL and DB_NAME to enable persistence.",
-    });
-  }
-
   const contentId = pathParts[1];
   if (!contentId) {
     return jsonResponse(400, { detail: "Missing content id." });
@@ -362,27 +436,26 @@ async function handleUpdateContent(event, pathParts) {
 
   const body = parseBody(event.body);
   const record = buildContentRecord(contentId, body.value ?? "");
-  await db.collection("editable_content").updateOne(
-    { content_id: contentId },
-    { $set: record },
-    { upsert: true }
-  );
+
+  if (db) {
+    await db.collection("editable_content").updateOne(
+      { content_id: contentId },
+      { $set: record },
+      { upsert: true }
+    );
+  } else {
+    const contentRecords = await getContentRecords();
+    const nextContent = contentRecords.filter((entry) => entry.content_id !== contentId);
+    nextContent.push(record);
+    nextContent.sort((left, right) => left.content_id.localeCompare(right.content_id));
+    await writePersistentValue(CONTENT_KEY, nextContent);
+  }
 
   return jsonResponse(200, { success: true, message: "Content updated" });
 }
 
 async function handleGetPortfolio() {
-  const db = await getDatabase();
-  if (!db) {
-    return jsonResponse(200, []);
-  }
-
-  const items = await db
-    .collection("portfolio")
-    .find({}, { projection: { _id: 0 } })
-    .sort({ order: 1 })
-    .toArray();
-
+  const items = await getPortfolioRecords();
   return jsonResponse(200, items);
 }
 
@@ -393,14 +466,8 @@ async function handleCreatePortfolio(event) {
   }
 
   const db = await getDatabase();
-  if (!db) {
-    return jsonResponse(503, {
-      detail: "Database is not configured. Set MONGO_URL and DB_NAME to enable persistence.",
-    });
-  }
-
   const body = parseBody(event.body);
-  const existingCount = await db.collection("portfolio").countDocuments();
+  const existingProjects = await getPortfolioRecords();
   const project = {
     project_id: crypto.randomUUID(),
     title: body.title || "",
@@ -409,11 +476,15 @@ async function handleCreatePortfolio(event) {
     project_type: body.project_type,
     video_url: body.video_url || "",
     seo_keywords: Array.isArray(body.seo_keywords) ? body.seo_keywords : [],
-    order: existingCount,
+    order: existingProjects.length,
     created_at: new Date().toISOString(),
   };
 
-  await db.collection("portfolio").insertOne(project);
+  if (db) {
+    await db.collection("portfolio").insertOne(project);
+  } else {
+    await writePersistentValue(PORTFOLIO_KEY, [...existingProjects, project]);
+  }
   return jsonResponse(200, project);
 }
 
@@ -424,30 +495,38 @@ async function handleUpdatePortfolio(event, pathParts) {
   }
 
   const db = await getDatabase();
-  if (!db) {
-    return jsonResponse(503, {
-      detail: "Database is not configured. Set MONGO_URL and DB_NAME to enable persistence.",
-    });
-  }
-
   const projectId = pathParts[1];
   const body = parseBody(event.body);
-  const result = await db.collection("portfolio").updateOne(
-    { project_id: projectId },
-    {
-      $set: {
-        title: body.title || "",
-        description: body.description || "",
-        full_description: body.full_description || "",
-        project_type: body.project_type,
-        video_url: body.video_url || "",
-        seo_keywords: Array.isArray(body.seo_keywords) ? body.seo_keywords : [],
-      },
-    }
-  );
+  const projectPatch = {
+    title: body.title || "",
+    description: body.description || "",
+    full_description: body.full_description || "",
+    project_type: body.project_type,
+    video_url: body.video_url || "",
+    seo_keywords: Array.isArray(body.seo_keywords) ? body.seo_keywords : [],
+  };
 
-  if (result.matchedCount === 0) {
-    return jsonResponse(404, { detail: "Project not found" });
+  if (db) {
+    const result = await db.collection("portfolio").updateOne(
+      { project_id: projectId },
+      { $set: projectPatch }
+    );
+
+    if (result.matchedCount === 0) {
+      return jsonResponse(404, { detail: "Project not found" });
+    }
+  } else {
+    const portfolio = await getPortfolioRecords();
+    const existingIndex = portfolio.findIndex((project) => project.project_id === projectId);
+    if (existingIndex === -1) {
+      return jsonResponse(404, { detail: "Project not found" });
+    }
+
+    portfolio[existingIndex] = {
+      ...portfolio[existingIndex],
+      ...projectPatch,
+    };
+    await writePersistentValue(PORTFOLIO_KEY, portfolio);
   }
 
   return jsonResponse(200, { success: true, message: "Project updated" });
@@ -460,17 +539,24 @@ async function handleDeletePortfolio(event, pathParts) {
   }
 
   const db = await getDatabase();
-  if (!db) {
-    return jsonResponse(503, {
-      detail: "Database is not configured. Set MONGO_URL and DB_NAME to enable persistence.",
-    });
-  }
-
   const projectId = pathParts[1];
-  const result = await db.collection("portfolio").deleteOne({ project_id: projectId });
+  if (db) {
+    const result = await db.collection("portfolio").deleteOne({ project_id: projectId });
+    if (result.deletedCount === 0) {
+      return jsonResponse(404, { detail: "Project not found" });
+    }
+  } else {
+    const portfolio = await getPortfolioRecords();
+    const nextPortfolio = portfolio.filter((project) => project.project_id !== projectId);
+    if (nextPortfolio.length === portfolio.length) {
+      return jsonResponse(404, { detail: "Project not found" });
+    }
 
-  if (result.deletedCount === 0) {
-    return jsonResponse(404, { detail: "Project not found" });
+    const reorderedPortfolio = nextPortfolio.map((project, index) => ({
+      ...project,
+      order: index,
+    }));
+    await writePersistentValue(PORTFOLIO_KEY, reorderedPortfolio);
   }
 
   return jsonResponse(200, { success: true, message: "Project deleted" });
@@ -483,20 +569,18 @@ async function handleInitializeContent(event) {
   }
 
   const db = await getDatabase();
-  if (!db) {
-    return jsonResponse(503, {
-      detail: "Database is not configured. Set MONGO_URL and DB_NAME to enable persistence.",
-    });
-  }
-
   const refreshedDefaults = defaultContent.map((item) => ({
     ...item,
     updated_at: new Date().toISOString(),
   }));
 
-  const collection = db.collection("editable_content");
-  await collection.deleteMany({});
-  await collection.insertMany(refreshedDefaults);
+  if (db) {
+    const collection = db.collection("editable_content");
+    await collection.deleteMany({});
+    await collection.insertMany(refreshedDefaults);
+  } else {
+    await writePersistentValue(CONTENT_KEY, refreshedDefaults);
+  }
 
   return jsonResponse(200, { success: true, message: "Content initialized" });
 }
@@ -560,12 +644,18 @@ async function handleContact(event) {
     html: htmlBody,
   });
 
+  const submission = {
+    ...body,
+    submitted_at: new Date().toISOString(),
+  };
+
   const db = await getDatabase();
   if (db) {
-    await db.collection("contact_submissions").insertOne({
-      ...body,
-      submitted_at: new Date().toISOString(),
-    });
+    await db.collection("contact_submissions").insertOne(submission);
+  } else {
+    const submissions = await readPersistentValue(CONTACT_SUBMISSIONS_KEY, []);
+    submissions.push(submission);
+    await writePersistentValue(CONTACT_SUBMISSIONS_KEY, submissions);
   }
 
   return jsonResponse(200, {
@@ -579,7 +669,9 @@ async function handleRoot() {
     message: "Open Circuit Solutions API",
     status: "operational",
     databaseConfigured: Boolean(process.env.MONGO_URL),
-    adminConfigured: Boolean(process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD),
+    adminConfigured: true,
+    adminUsername: getAdminUsername(),
+    persistenceBackend: getPersistenceBackend(),
     runtime: "netlify-function",
   });
 }

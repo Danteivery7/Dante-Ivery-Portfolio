@@ -4,6 +4,7 @@ Open Circuit Solutions is a React portfolio site for Dante Ivery, ready to deplo
 - a Create React App frontend in `frontend/`
 - Netlify Functions in `frontend/netlify/functions/`
 - MongoDB-backed editable content and portfolio storage
+- Netlify Blobs fallback persistence for live edits when MongoDB is not configured
 - SMTP-powered contact form delivery
 
 ## Deploying To Netlify
@@ -24,10 +25,12 @@ Open Circuit Solutions is a React portfolio site for Dante Ivery, ready to deplo
 
 ## Important Notes
 
+- If `MONGO_URL` is set, the site stores edits and portfolio data in MongoDB.
+- If `MONGO_URL` is not set, the site falls back to Netlify Blobs so text, image, and portfolio edits still persist on the live site.
 - `MONGO_URL` must be a remote MongoDB connection string such as MongoDB Atlas. `localhost` will not work on Netlify.
 - The frontend uses same-origin `/api/*` calls, and Netlify rewrites those to the bundled function automatically.
 - Edit mode uses backend authentication and bearer tokens. Content and portfolio write endpoints are protected.
-- If the database is not configured, the site still renders default hero/about content, but editing and portfolio persistence require MongoDB.
+- Default login is `danteivery` / `1234` unless you override it with `ADMIN_USERNAME` and `ADMIN_PASSWORD` in Netlify.
 
 ## Local Setup
 
@@ -36,4 +39,4 @@ Open Circuit Solutions is a React portfolio site for Dante Ivery, ready to deplo
 3. Install frontend dependencies with `npm install --prefix frontend`.
 4. Run the frontend with `npm --prefix frontend start`.
 
-The Netlify production API lives in [frontend/netlify/functions/api.js](/Users/danteivery/Documents/My Portfolio/frontend/netlify/functions/api.js). The original FastAPI version remains in [backend/server.py](/Users/danteivery/Documents/My Portfolio/backend/server.py) as a reference implementation.
+The Netlify production API lives in [frontend/netlify/functions/api.js](/Users/danteivery/Documents/My Portfolio/frontend/netlify/functions/api.js). The original FastAPI version remains in [backend/server.py](/Users/danteivery/Documents/My Portfolio/backend/server.py) as a reference implementation and uses the same default credentials.

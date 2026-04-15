@@ -24,6 +24,8 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+DEFAULT_ADMIN_USERNAME = "danteivery"
+DEFAULT_ADMIN_PASSWORD = "1234"
 
 mongo_url = os.getenv("MONGO_URL")
 db_name = os.getenv("DB_NAME", "open_circuit_solutions")
@@ -209,15 +211,15 @@ def build_content_record(content_id: str, value: str) -> dict:
 
 
 def get_admin_username() -> Optional[str]:
-    return os.getenv("ADMIN_USERNAME")
+    return os.getenv("ADMIN_USERNAME", DEFAULT_ADMIN_USERNAME)
 
 
 def get_admin_password() -> Optional[str]:
-    return os.getenv("ADMIN_PASSWORD")
+    return os.getenv("ADMIN_PASSWORD", DEFAULT_ADMIN_PASSWORD)
 
 
 def admin_is_configured() -> bool:
-    return bool(get_admin_username() and get_admin_password())
+    return True
 
 
 def build_admin_token() -> Optional[str]:
