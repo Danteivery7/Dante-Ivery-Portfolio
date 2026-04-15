@@ -637,7 +637,7 @@ const WorkPage = () => {
       setShowAddModal(false);
       setEditingProject(null);
     } catch (error) {
-      toast.error('Failed to save project');
+      toast.error(error.message || 'Failed to save project');
     }
   };
 
@@ -654,7 +654,7 @@ const WorkPage = () => {
       toast.success('Project permanently deleted');
     } catch (error) {
       console.error('Delete error:', error);
-      toast.error('Delete failed');
+      toast.error(error.message || 'Delete failed');
     }
   };
 

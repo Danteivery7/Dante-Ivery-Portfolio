@@ -114,7 +114,7 @@ export const EditProvider = ({ children }) => {
       return response.data;
     } catch (error) {
       console.error('Error adding project:', error);
-      throw error;
+      throw new Error(error.response?.data?.detail || error.response?.data?.message || 'Failed to add project.');
     }
   };
 
@@ -125,7 +125,7 @@ export const EditProvider = ({ children }) => {
       return true;
     } catch (error) {
       console.error('Error updating project:', error);
-      throw error;
+      throw new Error(error.response?.data?.detail || error.response?.data?.message || 'Failed to update project.');
     }
   };
 
@@ -136,7 +136,7 @@ export const EditProvider = ({ children }) => {
       return true;
     } catch (error) {
       console.error('Error deleting project:', error);
-      throw error;
+      throw new Error(error.response?.data?.detail || error.response?.data?.message || 'Failed to delete project.');
     }
   };
 
