@@ -1,0 +1,9 @@
+backend/.env
+frontend/.env
+frontend/.env.local
+frontend/node_modules
+frontend/build
+__pycache__
+.pytest_cache
+.vercel
+.DS_Store
