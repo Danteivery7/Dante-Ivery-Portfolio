@@ -35,6 +35,24 @@ export const EditProvider = ({ children }) => {
     loadPortfolio();
   }, []);
 
+  const clearAuthState = () => {
+    api.setAuthToken(null);
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+    }
+    setIsAuthenticated(false);
+    setIsEditMode(false);
+  };
+
+  const getRequestErrorMessage = (error, fallbackMessage) => {
+    if (error.response?.status === 401) {
+      clearAuthState();
+      return 'Your edit session expired. Please log in again.';
+    }
+
+    return error.response?.data?.detail || error.response?.data?.message || fallbackMessage;
+  };
+
   const loadContent = async () => {
     try {
       const response = await api.getAllContent();
@@ -85,12 +103,7 @@ export const EditProvider = ({ children }) => {
   };
 
   const logout = () => {
-    api.setAuthToken(null);
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
-    }
-    setIsAuthenticated(false);
-    setIsEditMode(false);
+    clearAuthState();
   };
 
   const updateContentValue = async (contentId, value) => {
@@ -105,7 +118,7 @@ export const EditProvider = ({ children }) => {
       console.error('Error updating content:', error);
       return {
         success: false,
-        message: error.response?.data?.detail || error.response?.data?.message || 'Failed to update content.',
+        message: getRequestErrorMessage(error, 'Failed to update content.'),
       };
     }
   };
@@ -117,7 +130,7 @@ export const EditProvider = ({ children }) => {
       return response.data;
     } catch (error) {
       console.error('Error adding project:', error);
-      throw new Error(error.response?.data?.detail || error.response?.data?.message || 'Failed to add project.');
+      throw new Error(getRequestErrorMessage(error, 'Failed to add project.'));
     }
   };
 
@@ -128,7 +141,7 @@ export const EditProvider = ({ children }) => {
       return true;
     } catch (error) {
       console.error('Error updating project:', error);
-      throw new Error(error.response?.data?.detail || error.response?.data?.message || 'Failed to update project.');
+      throw new Error(getRequestErrorMessage(error, 'Failed to update project.'));
     }
   };
 
@@ -139,7 +152,7 @@ export const EditProvider = ({ children }) => {
       return true;
     } catch (error) {
       console.error('Error deleting project:', error);
-      throw new Error(error.response?.data?.detail || error.response?.data?.message || 'Failed to delete project.');
+      throw new Error(getRequestErrorMessage(error, 'Failed to delete project.'));
     }
   };
 
