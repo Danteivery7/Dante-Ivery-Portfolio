@@ -117,7 +117,6 @@ const HeroSection = () => {
                   contentId="hero_image"
                   alt="Dante Ivery - CEO"
                   className="w-full h-auto object-cover"
-                  fallback="https://images.unsplash.com/photo-1619241805829-34fb64299391?auto=format&fit=crop&q=80"
                 />
               </div>
 

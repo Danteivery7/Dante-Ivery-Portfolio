@@ -11,6 +11,19 @@ const EditableImage = ({ contentId, alt = '', className = '', fallback }) => {
   const fileInputRef = useRef(null);
 
   const currentValue = content[contentId] || fallback || '';
+  const hasImage = Boolean(currentValue);
+
+  const loadingPlaceholder = (
+    <div
+      className={`${className} min-h-[420px] bg-[#151920] flex items-center justify-center`}
+      data-testid={`image-loading-${contentId}`}
+    >
+      <div className="text-center text-[#A1A1AA]">
+        <div className="w-10 h-10 mx-auto mb-3 rounded-full border-2 border-[#D4AF37]/40 border-t-[#D4AF37] animate-spin"></div>
+        <span className="text-sm font-semibold uppercase tracking-[0.3em]">Loading</span>
+      </div>
+    </div>
+  );
 
   const handleFileUpload = async (file) => {
     if (!file || !file.type.startsWith('image/')) {
@@ -60,12 +73,16 @@ const EditableImage = ({ contentId, alt = '', className = '', fallback }) => {
   if (isEditMode) {
     return (
       <div className="relative group">
-        <img
-          src={currentValue}
-          alt={alt}
-          className={`${className} transition-all`}
-          data-testid={`editable-image-${contentId}`}
-        />
+        {hasImage ? (
+          <img
+            src={currentValue}
+            alt={alt}
+            className={`${className} transition-all`}
+            data-testid={`editable-image-${contentId}`}
+          />
+        ) : (
+          loadingPlaceholder
+        )}
         
         {!showUpload && (
           <button
@@ -160,12 +177,16 @@ const EditableImage = ({ contentId, alt = '', className = '', fallback }) => {
   }
 
   return (
-    <img
-      src={currentValue}
-      alt={alt}
-      className={className}
-      data-testid={`image-${contentId}`}
-    />
+    hasImage ? (
+      <img
+        src={currentValue}
+        alt={alt}
+        className={className}
+        data-testid={`image-${contentId}`}
+      />
+    ) : (
+      loadingPlaceholder
+    )
   );
 };
 
