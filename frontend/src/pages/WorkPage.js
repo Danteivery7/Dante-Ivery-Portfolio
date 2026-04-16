@@ -7,7 +7,7 @@ import * as api from '../services/api';
 import { Button } from '../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 
-const getYouTubeEmbedUrl = (value, { autoplay = false, controls = false } = {}) => {
+const getYouTubeEmbedUrl = (value, { autoplay = true, controls = false } = {}) => {
   if (!value) {
     return '';
   }
@@ -38,6 +38,11 @@ const getYouTubeEmbedUrl = (value, { autoplay = false, controls = false } = {}) 
       modestbranding: '1',
       playsinline: '1',
       controls: controls ? '1' : '0',
+      fs: controls ? '1' : '0',
+      iv_load_policy: '3',
+      cc_load_policy: '0',
+      disablekb: controls ? '0' : '1',
+      showinfo: '0',
     });
 
     if (autoplay) {
@@ -55,7 +60,7 @@ const getYouTubeEmbedUrl = (value, { autoplay = false, controls = false } = {}) 
 
 const ProjectVideo = ({ videoUrl, className, interactive = false }) => {
   const youtubeEmbedUrl = getYouTubeEmbedUrl(videoUrl, {
-    autoplay: !interactive,
+    autoplay: true,
     controls: interactive,
   });
 
@@ -67,7 +72,7 @@ const ProjectVideo = ({ videoUrl, className, interactive = false }) => {
         className={className}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowFullScreen
-        loading="lazy"
+        loading={interactive ? 'eager' : 'lazy'}
         referrerPolicy="strict-origin-when-cross-origin"
         style={{ pointerEvents: interactive ? 'auto' : 'none' }}
       />
@@ -102,7 +107,7 @@ const DeviceFrame = ({ project, onClick }) => {
         className="cursor-pointer group"
         data-testid={`project-${project.project_id}`}
       >
-        <div className="relative mx-auto" style={{ width: '280px' }}>
+        <div className="relative mx-auto w-full max-w-[340px]" style={{ width: 'min(100%, 340px)' }}>
           {/* Phone Shell */}
           <div className="relative bg-[#1E232B] rounded-[48px] p-3 border-4 border-[#0B0F14] shadow-2xl">
             {/* Notch */}
@@ -137,7 +142,7 @@ const DeviceFrame = ({ project, onClick }) => {
         className="cursor-pointer group"
         data-testid={`project-${project.project_id}`}
       >
-        <div className="relative">
+        <div className="relative w-full max-w-[520px]">
           {/* Browser Window */}
           <div className="bg-[#1E232B] rounded-xl overflow-hidden border border-white/10 shadow-2xl">
             {/* Browser Header */}
@@ -201,7 +206,7 @@ const ProjectDetailModal = ({ project, isOpen, onClose, onEdit, onDelete, canEdi
       onClick={showHoverText ? handleZoomClick : undefined}
     >
       {project.project_type === 'app' ? (
-        <div className="relative mx-auto" style={{ width: '280px' }}>
+        <div className="relative mx-auto w-full max-w-[360px]" style={{ width: 'min(100%, 360px)' }}>
           <div className="relative bg-[#1E232B] rounded-[48px] p-3 border-4 border-[#0B0F14] shadow-2xl">
             <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-32 h-7 bg-[#0B0F14] rounded-b-3xl z-10"></div>
             <div className="relative bg-black rounded-[36px] overflow-hidden" style={{ aspectRatio: '9/16' }}>
@@ -221,7 +226,7 @@ const ProjectDetailModal = ({ project, isOpen, onClose, onEdit, onDelete, canEdi
           </div>
         </div>
       ) : (
-        <div className="relative">
+        <div className="relative w-full max-w-[760px]">
           <div className="bg-[#1E232B] rounded-xl overflow-hidden border border-white/10 shadow-2xl">
             <div className="bg-[#0B0F14] px-4 py-3 flex items-center space-x-2 border-b border-white/10">
               <div className="flex space-x-2">
