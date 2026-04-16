@@ -152,6 +152,19 @@ function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function getBlobContext() {
+  const encoded = process.env.NETLIFY_BLOBS_CONTEXT;
+  if (!encoded) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'));
+  } catch {
+    return {};
+  }
+}
+
 function jsonResponse(statusCode, body) {
   return new Response(JSON.stringify(body), {
     status: statusCode,
@@ -290,6 +303,65 @@ function normalizeContactSubmissions(value) {
 
 function getBlobStore() {
   return getStore({ name: STORE_NAME, consistency: 'strong' });
+}
+
+function sanitizeMediaFilename(filename = '') {
+  const trimmed = String(filename || 'video.mp4').trim();
+  const cleaned = trimmed
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+
+  return cleaned || 'video.mp4';
+}
+
+async function createSignedBlobUpload(key) {
+  const context = getBlobContext();
+  const siteID = context.siteID || process.env.SITE_ID;
+  const token = context.token;
+  const store = getBlobStore();
+
+  if (!siteID || !token) {
+    throw new Error('Netlify Blobs upload context is missing for video uploads.');
+  }
+
+  const url = new URL(`/api/v1/blobs/${siteID}/${store.name}/${key}`, 'https://api.netlify.com');
+  const response = await fetch(url.toString(), {
+    method: 'PUT',
+    headers: {
+      authorization: `Bearer ${token}`,
+      accept: 'application/json;type=signed-url',
+    },
+  });
+
+  if (response.status !== 200) {
+    throw new Error(`Video upload initialization failed with status ${response.status}.`);
+  }
+
+  const payload = await response.json();
+  return {
+    upload_url: payload.url,
+    upload_headers: {},
+  };
+}
+
+function getVideoContentTypeFromKey(key) {
+  const normalized = String(key || '').toLowerCase();
+
+  if (normalized.endsWith('.webm')) {
+    return 'video/webm';
+  }
+  if (normalized.endsWith('.mov')) {
+    return 'video/quicktime';
+  }
+  if (normalized.endsWith('.m4v')) {
+    return 'video/x-m4v';
+  }
+  if (normalized.endsWith('.ogv') || normalized.endsWith('.ogg')) {
+    return 'video/ogg';
+  }
+
+  return 'video/mp4';
 }
 
 async function getDatabase() {
@@ -514,6 +586,29 @@ async function handleGetPortfolio() {
   return jsonResponse(200, items);
 }
 
+async function handleCreateVideoUpload(request) {
+  const authError = requireAdmin(request);
+  if (authError) {
+    return authError;
+  }
+
+  const body = await parseBody(request);
+  const filename = sanitizeMediaFilename(body.filename);
+  const contentType = String(body.content_type || '').trim();
+
+  if (!contentType.startsWith('video/')) {
+    return jsonResponse(400, { detail: 'Please select a valid video file.' });
+  }
+
+  const key = `videos/${crypto.randomUUID()}-${filename}`;
+  const upload = await createSignedBlobUpload(key);
+
+  return jsonResponse(200, {
+    ...upload,
+    video_url: `/api/media/${encodeURIComponent(key)}`,
+  });
+}
+
 async function handleCreatePortfolio(request) {
   const authError = requireAdmin(request);
   if (authError) {
@@ -720,6 +815,32 @@ async function handleContact(request) {
   });
 }
 
+async function handleGetMedia(pathParts) {
+  const encodedKey = pathParts.slice(1).join('/');
+  const key = decodeURIComponent(encodedKey);
+
+  if (!key) {
+    return jsonResponse(400, { detail: 'Missing media key.' });
+  }
+
+  const store = getBlobStore();
+  const result = await store.getWithMetadata(key, { type: 'blob', consistency: 'strong' });
+
+  if (!result) {
+    return jsonResponse(404, { detail: 'Media not found' });
+  }
+
+  const contentType = result.metadata?.contentType || getVideoContentTypeFromKey(key) || result.data?.type || 'application/octet-stream';
+
+  return new Response(result.data, {
+    status: 200,
+    headers: {
+      'Content-Type': contentType,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    },
+  });
+}
+
 async function handleRoot() {
   return jsonResponse(200, {
     message: 'Open Circuit Solutions API',
@@ -747,6 +868,14 @@ export default async (request) => {
 
     if (method === 'POST' && normalizedPath === '/auth/login') {
       return handleLogin(request);
+    }
+
+    if (normalizedPath === '/uploads/video' && method === 'POST') {
+      return handleCreateVideoUpload(request);
+    }
+
+    if (pathParts[0] === 'media' && pathParts[1] && method === 'GET') {
+      return handleGetMedia(pathParts);
     }
 
     if (pathParts[0] === 'content') {

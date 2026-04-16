@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Edit, X, Smartphone, Globe, Upload } from 'lucide-react';
 import { useEdit } from '../context/EditContext';
 import { toast } from 'sonner';
+import * as api from '../services/api';
 import { Button } from '../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 
@@ -328,6 +329,7 @@ const ProjectDetailModal = ({ project, isOpen, onClose, onEdit, onDelete, canEdi
 const AddProjectModal = ({ isOpen, onClose, onSubmit, editingProject }) => {
   const [projectType, setProjectType] = useState(editingProject?.project_type || null);
   const [uploadMethod, setUploadMethod] = useState('url');
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -360,27 +362,36 @@ const AddProjectModal = ({ isOpen, onClose, onSubmit, editingProject }) => {
     }
   }, [editingProject, isOpen]);
 
-  const handleVideoUpload = (file) => {
+  const handleVideoUpload = async (file) => {
     if (!file || !file.type.startsWith('video/')) {
       toast.error('Please select a video file');
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('Video file too large. Maximum 10MB');
-      return;
-    }
+    try {
+      setIsUploadingVideo(true);
+      toast.info('Uploading video...');
+      const response = await api.createProjectVideoUpload(file.name, file.type);
+      const { upload_url, upload_headers, video_url } = response.data;
 
-    toast.info('Processing video...');
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setFormData({ ...formData, video_url: reader.result });
+      const uploadResponse = await fetch(upload_url, {
+        method: 'PUT',
+        headers: upload_headers || {},
+        body: file,
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error(`Video upload failed with status ${uploadResponse.status}`);
+      }
+
+      setFormData((current) => ({ ...current, video_url }));
       toast.success('Video uploaded');
-    };
-    reader.onerror = () => {
-      toast.error('Failed to upload video');
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      const message = error.response?.data?.detail || error.message || 'Failed to upload video';
+      toast.error(message);
+    } finally {
+      setIsUploadingVideo(false);
+    }
   };
 
   const handleDrop = (e) => {
@@ -399,6 +410,11 @@ const AddProjectModal = ({ isOpen, onClose, onSubmit, editingProject }) => {
     e.preventDefault();
     if (!projectType) {
       toast.error('Please select a project type');
+      return;
+    }
+
+    if (!formData.video_url.trim()) {
+      toast.error('Please upload a video or enter a video URL');
       return;
     }
 
@@ -565,7 +581,7 @@ const AddProjectModal = ({ isOpen, onClose, onSubmit, editingProject }) => {
               >
                 <Upload className="w-12 h-12 mx-auto mb-3 text-[#D4AF37]" />
                 <p className="text-white mb-2">Drop video here or click to upload</p>
-                <p className="text-xs text-[#A1A1AA]">MP4, WEBM, MOV up to 10MB</p>
+                <p className="text-xs text-[#A1A1AA]">MP4, WEBM, MOV</p>
                 <input
                   ref={videoInputRef}
                   type="file"
@@ -573,7 +589,10 @@ const AddProjectModal = ({ isOpen, onClose, onSubmit, editingProject }) => {
                   onChange={(e) => e.target.files[0] && handleVideoUpload(e.target.files[0])}
                   className="hidden"
                 />
-                {formData.video_url && formData.video_url.startsWith('data:') && (
+                {isUploadingVideo && (
+                  <p className="text-[#D4AF37] text-sm mt-3">Uploading...</p>
+                )}
+                {!isUploadingVideo && formData.video_url && (
                   <p className="text-[#D4AF37] text-sm mt-3">✓ Video uploaded</p>
                 )}
               </div>

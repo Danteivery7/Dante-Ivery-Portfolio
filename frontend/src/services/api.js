@@ -35,6 +35,8 @@ export const createProject = (project) => api.post('/api/portfolio', project);
 export const updateProject = (projectId, project) => 
   api.put(`/api/portfolio/${projectId}`, project);
 export const deleteProject = (projectId) => api.delete(`/api/portfolio/${projectId}`);
+export const createProjectVideoUpload = (filename, contentType) =>
+  api.post('/api/uploads/video', { filename, content_type: contentType });
 
 // Contact
 export const submitContactForm = (data) => api.post('/api/contact', data);
