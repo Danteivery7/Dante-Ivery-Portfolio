@@ -107,7 +107,7 @@ const DeviceFrame = ({ project, onClick }) => {
         className="cursor-pointer group"
         data-testid={`project-${project.project_id}`}
       >
-        <div className="relative mx-auto w-full max-w-[340px]" style={{ width: 'min(100%, 340px)' }}>
+        <div className="relative mx-auto w-full max-w-[380px]" style={{ width: 'min(100%, 380px)' }}>
           {/* Phone Shell */}
           <div className="relative bg-[#1E232B] rounded-[48px] p-3 border-4 border-[#0B0F14] shadow-2xl">
             {/* Notch */}
@@ -142,7 +142,7 @@ const DeviceFrame = ({ project, onClick }) => {
         className="cursor-pointer group"
         data-testid={`project-${project.project_id}`}
       >
-        <div className="relative w-full max-w-[520px]">
+        <div className="relative w-full max-w-[680px]">
           {/* Browser Window */}
           <div className="bg-[#1E232B] rounded-xl overflow-hidden border border-white/10 shadow-2xl">
             {/* Browser Header */}
@@ -206,7 +206,7 @@ const ProjectDetailModal = ({ project, isOpen, onClose, onEdit, onDelete, canEdi
       onClick={showHoverText ? handleZoomClick : undefined}
     >
       {project.project_type === 'app' ? (
-        <div className="relative mx-auto w-full max-w-[360px]" style={{ width: 'min(100%, 360px)' }}>
+        <div className="relative mx-auto w-full max-w-[400px]" style={{ width: 'min(100%, 400px)' }}>
           <div className="relative bg-[#1E232B] rounded-[48px] p-3 border-4 border-[#0B0F14] shadow-2xl">
             <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-32 h-7 bg-[#0B0F14] rounded-b-3xl z-10"></div>
             <div className="relative bg-black rounded-[36px] overflow-hidden" style={{ aspectRatio: '9/16' }}>
@@ -226,7 +226,7 @@ const ProjectDetailModal = ({ project, isOpen, onClose, onEdit, onDelete, canEdi
           </div>
         </div>
       ) : (
-        <div className="relative w-full max-w-[760px]">
+        <div className="relative w-full max-w-[920px]">
           <div className="bg-[#1E232B] rounded-xl overflow-hidden border border-white/10 shadow-2xl">
             <div className="bg-[#0B0F14] px-4 py-3 flex items-center space-x-2 border-b border-white/10">
               <div className="flex space-x-2">
@@ -801,7 +801,7 @@ const WorkPage = () => {
             {portfolio.filter(p => p.project_type === 'app').length > 0 && (
               <div className="mb-16">
                 <h2 className="text-3xl font-heading font-bold text-white mb-8">Mobile Apps</h2>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-12 justify-items-center">
+                <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-x-16 gap-y-14 justify-items-center">
                   {portfolio
                     .filter(p => p.project_type === 'app')
                     .map((project, index) => (
@@ -833,7 +833,7 @@ const WorkPage = () => {
             {portfolio.filter(p => p.project_type === 'website').length > 0 && (
               <div>
                 <h2 className="text-3xl font-heading font-bold text-white mb-8">Websites</h2>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-12 justify-items-center">
+                <div className="grid xl:grid-cols-2 gap-x-16 gap-y-14 justify-items-center">
                   {portfolio
                     .filter(p => p.project_type === 'website')
                     .map((project, index) => (
