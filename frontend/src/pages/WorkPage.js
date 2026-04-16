@@ -7,6 +7,89 @@ import * as api from '../services/api';
 import { Button } from '../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 
+const getYouTubeEmbedUrl = (value, { autoplay = false, controls = false } = {}) => {
+  if (!value) {
+    return '';
+  }
+
+  try {
+    const url = new URL(value);
+    const host = url.hostname.replace(/^www\./, '');
+    let videoId = '';
+
+    if (host === 'youtu.be') {
+      videoId = url.pathname.split('/').filter(Boolean)[0] || '';
+    } else if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
+      if (url.pathname === '/watch') {
+        videoId = url.searchParams.get('v') || '';
+      } else if (url.pathname.startsWith('/embed/')) {
+        videoId = url.pathname.split('/')[2] || '';
+      } else if (url.pathname.startsWith('/shorts/')) {
+        videoId = url.pathname.split('/')[2] || '';
+      }
+    }
+
+    if (!videoId) {
+      return '';
+    }
+
+    const params = new URLSearchParams({
+      rel: '0',
+      modestbranding: '1',
+      playsinline: '1',
+      controls: controls ? '1' : '0',
+    });
+
+    if (autoplay) {
+      params.set('autoplay', '1');
+      params.set('mute', '1');
+      params.set('loop', '1');
+      params.set('playlist', videoId);
+    }
+
+    return `https://www.youtube-nocookie.com/embed/${videoId}?${params.toString()}`;
+  } catch {
+    return '';
+  }
+};
+
+const ProjectVideo = ({ videoUrl, className, interactive = false }) => {
+  const youtubeEmbedUrl = getYouTubeEmbedUrl(videoUrl, {
+    autoplay: !interactive,
+    controls: interactive,
+  });
+
+  if (youtubeEmbedUrl) {
+    return (
+      <iframe
+        src={youtubeEmbedUrl}
+        title="Project video preview"
+        className={className}
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowFullScreen
+        loading="lazy"
+        referrerPolicy="strict-origin-when-cross-origin"
+        style={{ pointerEvents: interactive ? 'auto' : 'none' }}
+      />
+    );
+  }
+
+  return (
+    <video
+      src={videoUrl}
+      autoPlay={!interactive}
+      loop={!interactive}
+      muted={!interactive}
+      controls={interactive}
+      playsInline
+      preload={interactive ? 'metadata' : 'auto'}
+      className={className}
+      style={{ pointerEvents: interactive ? 'auto' : 'none' }}
+      onError={(e) => console.error('Video error:', e)}
+    />
+  );
+};
+
 const DeviceFrame = ({ project, onClick }) => {
   const isApp = project.project_type === 'app';
 
@@ -27,16 +110,9 @@ const DeviceFrame = ({ project, onClick }) => {
             
             {/* Screen */}
             <div className="relative bg-black rounded-[36px] overflow-hidden" style={{ aspectRatio: '9/16' }}>
-              <video
-                src={project.video_url}
-                autoPlay
-                loop
-                muted
-                playsInline
-                preload="auto"
-                className="w-full h-full object-cover"
-                style={{ pointerEvents: 'none' }}
-                onError={(e) => console.error('Video error:', e)}
+              <ProjectVideo
+                videoUrl={project.video_url}
+                className="w-full h-full object-cover border-0"
               />
               {/* Overlay on Hover */}
               <div className="absolute inset-0 bg-[#D4AF37]/0 group-hover:bg-[#D4AF37]/20 transition-all duration-300 flex items-center justify-center">
@@ -78,16 +154,9 @@ const DeviceFrame = ({ project, onClick }) => {
             
             {/* Browser Content */}
             <div className="relative bg-black" style={{ aspectRatio: '16/10' }}>
-              <video
-                src={project.video_url}
-                autoPlay
-                loop
-                muted
-                playsInline
-                preload="auto"
-                className="w-full h-full object-cover"
-                style={{ pointerEvents: 'none' }}
-                onError={(e) => console.error('Video error:', e)}
+              <ProjectVideo
+                videoUrl={project.video_url}
+                className="w-full h-full object-cover border-0"
               />
               {/* Overlay on Hover */}
               <div className="absolute inset-0 bg-[#D4AF37]/0 group-hover:bg-[#D4AF37]/20 transition-all duration-300 flex items-center justify-center">
@@ -136,17 +205,11 @@ const ProjectDetailModal = ({ project, isOpen, onClose, onEdit, onDelete, canEdi
           <div className="relative bg-[#1E232B] rounded-[48px] p-3 border-4 border-[#0B0F14] shadow-2xl">
             <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-32 h-7 bg-[#0B0F14] rounded-b-3xl z-10"></div>
             <div className="relative bg-black rounded-[36px] overflow-hidden" style={{ aspectRatio: '9/16' }}>
-              <video 
-                autoPlay 
-                loop 
-                muted 
-                playsInline
-                preload="metadata"
-                className="w-full h-full object-cover" 
-                style={{ pointerEvents: 'none' }}
-              >
-                <source src={project.video_url} type="video/mp4; codecs=avc1.42E01E,mp4a.40.2" />
-              </video>
+              <ProjectVideo
+                videoUrl={project.video_url}
+                interactive={!showHoverText}
+                className="w-full h-full object-cover border-0"
+              />
               {showHoverText && (
                 <div className="absolute inset-0 bg-[#D4AF37]/0 group-hover:bg-[#D4AF37]/20 transition-all duration-300 flex items-center justify-center pointer-events-none">
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity text-white text-center">
@@ -169,17 +232,11 @@ const ProjectDetailModal = ({ project, isOpen, onClose, onEdit, onDelete, canEdi
               <div className="flex-1 bg-[#151920] rounded px-3 py-1 text-xs text-[#A1A1AA]">{project.title}.com</div>
             </div>
             <div className="relative bg-black" style={{ aspectRatio: '16/10' }}>
-              <video 
-                autoPlay 
-                loop 
-                muted 
-                playsInline
-                preload="metadata"
-                className="w-full h-full object-cover" 
-                style={{ pointerEvents: 'none' }}
-              >
-                <source src={project.video_url} type="video/mp4; codecs=avc1.42E01E,mp4a.40.2" />
-              </video>
+              <ProjectVideo
+                videoUrl={project.video_url}
+                interactive={!showHoverText}
+                className="w-full h-full object-cover border-0"
+              />
               {showHoverText && (
                 <div className="absolute inset-0 bg-[#D4AF37]/0 group-hover:bg-[#D4AF37]/20 transition-all duration-300 flex items-center justify-center pointer-events-none">
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity text-white text-center">
@@ -567,10 +624,10 @@ const AddProjectModal = ({ isOpen, onClose, onSubmit, editingProject }) => {
                   onChange={(e) => setFormData({ ...formData, video_url: e.target.value })}
                   required
                   className="w-full bg-[#0B0F14] border border-white/10 rounded-lg p-3 text-white outline-none focus:border-[#D4AF37]"
-                  placeholder="https://example.com/video.mp4"
+                  placeholder="https://youtube.com/watch?v=... or https://example.com/video.mp4"
                   data-testid="project-video-input"
                 />
-                <p className="text-xs text-[#A1A1AA] mt-2">Enter a direct video URL (mp4, webm)</p>
+                <p className="text-xs text-[#A1A1AA] mt-2">Enter a YouTube link or a direct video URL</p>
               </>
             ) : (
               <div
